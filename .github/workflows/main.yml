@@ -20,54 +20,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Setup Android
         uses: android-actions/setup-android@v3
 
-      - name: Find Android SDK
-        shell: bash
+      - name: Prepare Gradle
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          find "$ANDROID_HOME" -name sdkmanager -type f 2>/dev/null || true
-
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          SDKMANAGER=$(find "$ANDROID_HOME" -name sdkmanager -type f 2>/dev/null | head -n 1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found"
+          if [ ! -f "./gradlew" ]; then
+            echo "gradlew پیدا نشد"
             exit 1
           fi
+          chmod +x ./gradlew
 
-          echo "Using sdkmanager: $SDKMANAGER"
-
-          yes | "$SDKMANAGER" --licenses || true
-
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Make Gradle executable
-        shell: bash
-        run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-          fi
-
-      - name: Build APK
-        shell: bash
-        run: |
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --stacktrace
-          else
-            echo "ERROR: gradlew not found."
-            exit 1
-          fi
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Find APK
-        shell: bash
         run: |
           find . -type f -name "*.apk" -print
 
