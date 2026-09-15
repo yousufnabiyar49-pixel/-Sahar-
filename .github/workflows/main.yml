@@ -11,36 +11,209 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout project
+
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Prepare Gradle
+      - name: Install Android SDK
+        shell: bash
         run: |
-          if [ ! -f "./gradlew" ]; then
-            echo "gradlew پیدا نشد"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -f "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android SDK manager not found"
             exit 1
           fi
-          chmod +x ./gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+          yes | "$SDKMANAGER" --licenses || true
 
-      - name: Find APK
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Create Android project
+        shell: bash
         run: |
-          find . -type f -name "*.apk" -print
+
+          rm -rf app
+          rm -f build.gradle settings.gradle gradle.properties
+
+          mkdir -p app/src/main/java/com/sahar/app
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle <<'EOF'
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "Sahar"
+include(":app")
+EOF
+
+          cat > build.gradle <<'EOF'
+plugins {
+    id 'com.android.application' version '8.6.1' apply false
+}
+EOF
+
+          cat > gradle.properties <<'EOF'
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+EOF
+
+          cat > app/build.gradle <<'EOF'
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.sahar.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.sahar.app'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+}
+
+dependencies {
+}
+EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+<resources>
+    <string name="app_name">Sahar</string>
+</resources>
+EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+    </application>
+
+</manifest>
+EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+<resources>
+
+    <style name="AppTheme"
+        parent="android:style/Theme.Material.Light.NoActionBar">
+
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+
+    </style>
+
+</resources>
+EOF
+
+          cat > app/src/main/java/com/sahar/app/MainActivity.java <<'EOF'
+package com.sahar.app;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.graphics.Color;
+import android.view.Gravity;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+public class MainActivity extends Activity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setGravity(Gravity.CENTER);
+        layout.setBackgroundColor(Color.WHITE);
+
+        TextView title = new TextView(this);
+        title.setText("سحر");
+        title.setTextSize(32);
+        title.setTextColor(Color.BLACK);
+        title.setGravity(Gravity.CENTER);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("سلام، من سحر هستم");
+        subtitle.setTextSize(20);
+        subtitle.setTextColor(Color.DKGRAY);
+        subtitle.setGravity(Gravity.CENTER);
+
+        layout.addView(title);
+        layout.addView(subtitle);
+
+        setContentView(layout);
+    }
+}
+EOF
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build APK
+        shell: bash
+        run: |
+          gradle assembleDebug --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          find app/build/outputs/apk -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Sahar-APK
-          path: "**/*.apk"
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
